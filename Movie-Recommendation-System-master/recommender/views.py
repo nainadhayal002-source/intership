@@ -40,41 +40,83 @@ class MovieRecommender:
         self.config = None
         self._load_models(progress_callback)
     
+    def _build_fallback_dataset(self):
+        """Create a lightweight demo dataset when trained model files are unavailable."""
+        fallback_titles = [
+            "Inception",
+            "The Matrix",
+            "Interstellar",
+            "The Dark Knight",
+            "Parasite",
+            "Dune",
+        ]
+        fallback_data = []
+        for idx, title in enumerate(fallback_titles):
+            fallback_data.append({
+                "title": title,
+                "release_date": "2000-01-01",
+                "primary_company": "Demo Studio",
+                "genres": ["Drama", "Thriller"],
+                "vote_average": 8.0 + (idx % 3) * 0.2,
+                "vote_count": 1000 + idx * 100,
+                "imdb_id": f"tt{1000000 + idx}",
+                "poster_path": None,
+            })
+
+        metadata = pd.DataFrame(fallback_data)
+        similarity = np.array([
+            [1.0, 0.82, 0.34, 0.16, 0.12, 0.09],
+            [0.82, 1.0, 0.28, 0.20, 0.11, 0.08],
+            [0.34, 0.28, 1.0, 0.41, 0.17, 0.22],
+            [0.16, 0.20, 0.41, 1.0, 0.27, 0.19],
+            [0.12, 0.11, 0.17, 0.27, 1.0, 0.33],
+            [0.09, 0.08, 0.22, 0.19, 0.33, 1.0],
+        ], dtype=float)
+        return metadata, similarity
+
     def _load_models(self, progress_callback=None):
-        """Load all model artifacts with progress tracking"""
+        """Load all model artifacts with progress tracking, falling back to demo data if needed."""
         global _MODEL_LOAD_PROGRESS
         logger.info(f"Loading models from {self.model_dir}...")
-        
-        # Load metadata (25%)
-        if progress_callback:
-            progress_callback(10)
-        self.metadata = pd.read_parquet(self.model_dir / 'movie_metadata.parquet')
-        if progress_callback:
-            progress_callback(25)
-        
-        # Load similarity matrix (sparse or dense) (50%)
-        if progress_callback:
-            progress_callback(40)
-        if (self.model_dir / 'similarity_matrix.npz').exists():
-            self.similarity_matrix = load_npz(self.model_dir / 'similarity_matrix.npz').toarray()
-        else:
-            self.similarity_matrix = np.load(self.model_dir / 'similarity_matrix.npy')
-        if progress_callback:
-            progress_callback(65)
-        
-        # Load title mapping (75%)
-        with open(self.model_dir / 'title_to_idx.json', 'r') as f:
-            self.title_to_idx = json.load(f)
-        if progress_callback:
-            progress_callback(80)
-        
-        # Load config (100%)
-        with open(self.model_dir / 'config.json', 'r') as f:
-            self.config = json.load(f)
-        if progress_callback:
-            progress_callback(100)
-        
-        logger.info(f"Loaded {self.config['n_movies']:,} movies successfully")
+
+        try:
+            # Load metadata (25%)
+            if progress_callback:
+                progress_callback(10)
+            self.metadata = pd.read_parquet(self.model_dir / 'movie_metadata.parquet')
+            if progress_callback:
+                progress_callback(25)
+
+            # Load similarity matrix (sparse or dense) (50%)
+            if progress_callback:
+                progress_callback(40)
+            if (self.model_dir / 'similarity_matrix.npz').exists():
+                self.similarity_matrix = load_npz(self.model_dir / 'similarity_matrix.npz').toarray()
+            else:
+                self.similarity_matrix = np.load(self.model_dir / 'similarity_matrix.npy')
+            if progress_callback:
+                progress_callback(65)
+
+            # Load title mapping (75%)
+            with open(self.model_dir / 'title_to_idx.json', 'r') as f:
+                self.title_to_idx = json.load(f)
+            if progress_callback:
+                progress_callback(80)
+
+            # Load config (100%)
+            with open(self.model_dir / 'config.json', 'r') as f:
+                self.config = json.load(f)
+            if progress_callback:
+                progress_callback(100)
+
+            logger.info(f"Loaded {self.config['n_movies']:,} movies successfully")
+        except Exception as exc:
+            logger.warning("Model artifacts not found; using built-in demo dataset: %s", exc)
+            self.metadata, self.similarity_matrix = self._build_fallback_dataset()
+            self.title_to_idx = {title: idx for idx, title in enumerate(self.metadata['title'].tolist())}
+            self.config = {'n_movies': len(self.metadata)}
+            if progress_callback:
+                progress_callback(100)
     
     def find_movie(self, title: str) -> Optional[str]:
         """Find closest matching movie title"""

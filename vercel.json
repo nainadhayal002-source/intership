@@ -1,9 +1,8 @@
 {
   "version": 2,
-  "rootDirectory": "Movie-Recommendation-System-master",
   "builds": [
     {
-      "src": "movie_recommendation/wsgi.py",
+      "src": "Movie-Recommendation-System-master/movie_recommendation/wsgi.py",
       "use": "@vercel/python",
       "config": {
         "runtime": "python3.10"
@@ -13,9 +12,9 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "movie_recommendation/wsgi.py"
+      "dest": "Movie-Recommendation-System-master/movie_recommendation/wsgi.py"
     }
   ],
-  "installCommand": "pip install -r requirements.txt",
-  "buildCommand": "python manage.py collectstatic --noinput"
+  "installCommand": "cd Movie-Recommendation-System-master && pip install -r requirements.txt",
+  "buildCommand": "cd Movie-Recommendation-System-master && python manage.py collectstatic --noinput"
 }
